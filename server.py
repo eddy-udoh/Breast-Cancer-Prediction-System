@@ -1,60 +1,70 @@
 from flask import Flask, request, jsonify, render_template
 import numpy as np
 import pickle
+import os
 
-app = Flask(__name__)
+server = Flask(__name__)
 
-# Load the pickled model and scaler
-with open("model.h5", "rb") as f:
-    saved_data = pickle.load(f)
-    model = saved_data["model"]
-    scaler = saved_data.get("scaler") 
+# Load trained model package
+model_path = "cancer_model.pkl"
+if not os.path.exists(model_path):
+    raise FileNotFoundError(f"Model file '{model_path}' not found. Run train_classifier.py first.")
 
-@app.route('/')
-def home():
+with open(model_path, "rb") as file:
+    model_package = pickle.load(file)
+    classifier = model_package["classifier"]
+    normalizer = model_package["normalizer"]
+
+@server.route('/')
+def index():
     return render_template('index.html')
 
-@app.route('/predict', methods=['POST'])
-def predict():
+@server.route('/diagnose', methods=['POST'])
+def diagnose():
     try:
-        data = request.get_json()
+        input_data = request.get_json()
         
-        # Extract features in the correct order
-        features = np.array([[
-            data['radius'],
-            data['texture'],
-            data['perimeter'],
-            data['area'],
-            data['smoothness'],
-            data['compactness'],
-            data['concavity'],
-            data['concave_points'],
-            data['symmetry'],
-            data['fractal']
+        # Build feature array from input
+        feature_vector = np.array([[
+            input_data['radius'],
+            input_data['texture'],
+            input_data['perimeter'],
+            input_data['area'],
+            input_data['smoothness'],
+            input_data['compactness'],
+            input_data['concavity'],
+            input_data['concave_points'],
+            input_data['symmetry'],
+            input_data['fractal']
         ]])
         
-        # Scale features if scaler is available
-        if scaler is not None:
-            features = scaler.transform(features)
+        # Normalize the features
+        normalized_features = normalizer.transform(feature_vector)
 
-        # Make prediction
-        prediction = model.predict(features)
+        # Get prediction and probability
+        prediction_class = classifier.predict(normalized_features)[0]
+        prediction_proba = classifier.predict_proba(normalized_features)[0]
         
-        # Handle binary prediction (adjust depending on your model)
-        probability = float(prediction[0]) if prediction.ndim == 1 else float(prediction[0][0])
-        malignant = probability > 0.5
+        # Class 0 = malignant, 1 = benign in sklearn's breast cancer dataset
+        is_malignant = (prediction_class == 0)
+        confidence = prediction_proba[0] if is_malignant else prediction_proba[1]
         
         return jsonify({
-            'malignant': bool(malignant),
-            'probability': probability if malignant else 1 - probability,
+            'malignant': bool(is_malignant),
+            'probability': float(confidence),
             'status': 'success'
         })
     
-    except Exception as e:
+    except KeyError as ke:
         return jsonify({
-            'error': str(e),
+            'error': f'Missing required field: {str(ke)}',
             'status': 'error'
         }), 400
+    except Exception as ex:
+        return jsonify({
+            'error': f'Prediction failed: {str(ex)}',
+            'status': 'error'
+        }), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    server.run(debug=True, host='0.0.0.0', port=5000)

@@ -1,24 +1,42 @@
 import pickle
 from sklearn.datasets import load_breast_cancer
 from sklearn.model_selection import train_test_split
-from sklearn.svm import SVC
-from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import accuracy_score
 
-# 1. Load data
-data = load_breast_cancer()
-# We use all features for training to keep the model accurate
-X_train, X_test, y_train, y_test = train_test_split(data.data, data.target, test_size=0.2, random_state=42)
+# Load the breast cancer dataset
+dataset = load_breast_cancer()
+features = dataset.data
+labels = dataset.target
 
-# 2. Scale data
-scaler = StandardScaler()
-X_train_scaled = scaler.fit_transform(X_train)
+# Split into training and testing sets (80/20 split)
+X_train, X_test, y_train, y_test = train_test_split(
+    features, labels, test_size=0.2, random_state=123
+)
 
-# 3. Train SVM Model
-model = SVC(kernel='linear', random_state=42)
-model.fit(X_train_scaled, y_train)
+# Normalize features using MinMaxScaler
+normalizer = MinMaxScaler()
+X_train_normalized = normalizer.fit_transform(X_train)
+X_test_normalized = normalizer.transform(X_test)
 
-# 4. Save model and scaler as model.h5
-with open('model.h5', 'wb') as f:
-    pickle.dump({'model': model, 'scaler': scaler}, f)
+# Train Random Forest classifier
+classifier = RandomForestClassifier(n_estimators=100, random_state=123, max_depth=10)
+classifier.fit(X_train_normalized, y_train)
 
-print("Success! 'model.h5' for Breast Cancer (SVM) has been created.")
+# Evaluate model accuracy
+y_pred = classifier.predict(X_test_normalized)
+test_accuracy = accuracy_score(y_test, y_pred)
+print(f"Model Accuracy on Test Set: {test_accuracy:.2%}")
+
+# Save the trained model and normalizer
+model_package = {
+    'classifier': classifier,
+    'normalizer': normalizer,
+    'feature_names': dataset.feature_names.tolist()
+}
+
+with open('cancer_model.pkl', 'wb') as file:
+    pickle.dump(model_package, file)
+
+print("✓ Model saved successfully as 'cancer_model.pkl'")
