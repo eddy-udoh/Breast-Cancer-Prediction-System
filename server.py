@@ -8,7 +8,9 @@ server = Flask(__name__)
 # Load trained model package
 model_path = "cancer_model.pkl"
 if not os.path.exists(model_path):
-    raise FileNotFoundError(f"Model file '{model_path}' not found. Run train_classifier.py first.")
+    print("Model not found. Training model now...")
+    import subprocess
+    subprocess.run(["python", "train_classifier.py"], check=True)
 
 with open(model_path, "rb") as file:
     model_package = pickle.load(file)
